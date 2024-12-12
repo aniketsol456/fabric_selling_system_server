@@ -4,50 +4,51 @@ const fabricdb = require("../models/fabricSchema");
 const router = new express.Router();
 var bcrypt = require("bcryptjs");
 const authenticate = require("../middleware/authenticate");
-
+const Cart = require("../models/cartSchema");
 //for user registration
 
 router.post("/register", async (req, res) => {
-
     const { fname, email, password, cpassword } = req.body;
 
     if (!fname || !email || !password || !cpassword) {
-        res.status(422).json({ error: "Fill all the details" })
+        return res.status(422).json({ error: "Fill all the details" });
     }
 
     try {
         const preuser = await userdb.findOne({ email: email });
+
         if (preuser) {
-            res.status(422).json({ error: "This email is Already Exist" })
-        }
-        else if (password !== cpassword) {
-            res.status(422).json({ error: "Password and Confirm Password Not Match" })
-        }
-        else {
-            const finalUser = new userdb({
-                fname, email, password, cpassword
-            });
-            //here password hashing
+            return res.status(422).json({ error: "This email is Already Exist" });
+        } else if (password !== cpassword) {
+            return res.status(422).json({ error: "Password and Confirm Password Not Match" });
+        } else {
+            const finalUser = new userdb({ fname, email, password, cpassword });
             const storeData = await finalUser.save();
-            // console.log(storeData);
-            res.status(201).json({ status: 201, storeData });
+
+            const token = jwt.sign({ _id: storeData._id }, keysecret, { expiresIn: "7d" });
+
+            const result = {
+                storeData,
+                token,
+            };
+
+            res.status(201).json({ status: 201, result });
         }
     } catch (error) {
-        res.status(422).json({ error });
-        console.log("catch block error");
-
+        console.log("Catch Block Error", error);
+        res.status(422).json({ error: "Something went wrong" });
     }
 });
 
+
 //User Login
 router.post("/login", async (req, res) => {
-    // console.log(req.body);
-
     const { email, password } = req.body;
 
     if (!email || !password) {
-        res.status(422).json({ error: "Fill all the details" })
+        return res.status(422).json({ error: "Fill all the details" });
     }
+
     try {
         const userValid = await userdb.findOne({ email: email });
 
@@ -55,30 +56,25 @@ router.post("/login", async (req, res) => {
             const isMatch = await bcrypt.compare(password, userValid.password);
 
             if (!isMatch) {
-                res.status(422).json({ error: "Invalid details" })
+                return res.status(422).json({ error: "Invalid details" });
             } else {
-                //token generate
                 const token = await userValid.generateAuthtoken();
 
-                //cookie generatte
-                res.cookie("usercookie", token, {
-                    expires: new Date(Date.now() + 9000000),
-                    httpOnly: true
-                });
-
                 const result = {
-                    userValid,
-                    token
-                }
-                res.status(201).json({ status: 201, result })
+                    userValid: { id: userValid._id, email: userValid.email },
+                    token,
+                };
+                return res.status(201).json({ status: 201, result });
             }
+        } else {
+            return res.status(422).json({ error: "User not found" });
         }
     } catch (error) {
         res.status(401).json(error);
-        console.log("Catch Block");
+        console.log("Catch Block Error", error);
     }
-
 });
+
 
 router.post("/logout", authenticate, async (req, res) => {
     try {
@@ -103,7 +99,7 @@ router.get("/validuser", authenticate, async (req, res) => {
 });
 
 // Fabric apis 
-router.post("/fabric/create", authenticate, async (req, res) => {
+router.post("/fabric/create", async (req, res) => {
     const { name, color, type, weight, fabricContent, width, design, price, discount } = req.body;
 
     if (!name || !color || !type || !weight || !fabricContent || !width || !design || !price) {
@@ -131,7 +127,7 @@ router.post("/fabric/create", authenticate, async (req, res) => {
 });
 
 // Fetch all fabrics
-router.get("/fabric/all", authenticate, async (req, res) => {
+router.get("/fabric/all", async (req, res) => {
     try {
         const fabrics = await fabricdb.find();
         res.status(200).json({ status: 200, fabrics });
@@ -140,8 +136,68 @@ router.get("/fabric/all", authenticate, async (req, res) => {
     }
 });
 
+// Fetch unique color options
+router.get("/fabric/colors", async (req, res) => {
+  try {
+    const colors = await fabricdb.distinct('color');
+    res.status(200).json({ status: 200, colors });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch colors", details: error });
+  }
+});
+
+// Fetch unique type options
+router.get("/fabric/types", async (req, res) => {
+  try {
+    const types = await fabricdb.distinct('type');
+    res.status(200).json({ status: 200, types });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch types", details: error });
+  }
+});
+
+// Fetch unique weight options
+router.get("/fabric/weights", async (req, res) => {
+  try {
+    const weights = await fabricdb.distinct('weight');
+    res.status(200).json({ status: 200, weights });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch weights", details: error });
+  }
+});
+
+// Fetch unique fabric content options
+router.get("/fabric/contents", async (req, res) => {
+  try {
+    const contents = await fabricdb.distinct('fabricContent');
+    res.status(200).json({ status: 200, contents });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch fabric contents", details: error });
+  }
+});
+
+// Fetch unique width options
+router.get("/fabric/widths", async (req, res) => {
+  try {
+    const widths = await fabricdb.distinct('width');
+    res.status(200).json({ status: 200, widths });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch widths", details: error });
+  }
+});
+
+// Fetch unique design options
+router.get("/fabric/designs", async (req, res) => {
+  try {
+    const designs = await fabricdb.distinct('design');
+    res.status(200).json({ status: 200, designs });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch designs", details: error });
+  }
+});
+
 // Fetch a particular fabric by ID
-router.get("fabric/:id", authenticate, async (req, res) => {
+router.get("fabric/:id", async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -156,7 +212,7 @@ router.get("fabric/:id", authenticate, async (req, res) => {
 });
 
 // Delete all fabrics
-router.delete("/fabric/deleteAll", authenticate, async (req, res) => {
+router.delete("/fabric/deleteAll", async (req, res) => {
     try {
         await fabricdb.deleteMany();
         res.status(200).json({ status: 200, message: "All fabrics deleted successfully" });
@@ -166,7 +222,7 @@ router.delete("/fabric/deleteAll", authenticate, async (req, res) => {
 });
 
 // Delete a particular fabric by ID
-router.delete("/fabric/delete/:id", authenticate, async (req, res) => {
+router.delete("/fabric/delete/:id", async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -181,7 +237,7 @@ router.delete("/fabric/delete/:id", authenticate, async (req, res) => {
 });
 
 // Update a particular fabric by ID
-router.patch("/fabric/update/:id", authenticate, async (req, res) => {
+router.patch("/fabric/update/:id", async (req, res) => {
     const { id } = req.params;
     const { name, color, type, weight, fabricContent, width, design, price, discount } = req.body;
 
@@ -204,6 +260,124 @@ router.patch("/fabric/update/:id", authenticate, async (req, res) => {
         res.status(200).json({ status: 200, updatedFabric });
     } catch (error) {
         res.status(500).json({ error: "Failed to update fabric", details: error });
+    }
+});
+
+// Add or update an item in the cart
+router.post("/cart/add", async (req, res) => {
+    const { userId, fabricId, quantity, price, discount } = req.body;
+
+    if (!userId || !fabricId || !quantity || !price) {
+        return res.status(422).json({ error: "Please provide all required fields" });
+    }
+
+    try {
+        const cart = await Cart.findOne({ userId });
+
+        const finalPrice = price - (price * (discount || 0)) / 100;
+
+        if (cart) {
+            // Check if the fabric already exists in the cart
+            const itemIndex = cart.items.findIndex(item => item.fabricId.toString() === fabricId);
+            if (itemIndex > -1) {
+                // Update quantity if it exists
+                cart.items[itemIndex].quantity += quantity;
+                cart.items[itemIndex].finalPrice = cart.items[itemIndex].quantity * finalPrice;
+            } else {
+                // Add new item to cart
+                cart.items.push({ fabricId, quantity, price, discount, finalPrice });
+            }
+            await cart.save();
+            res.status(200).json({ status: 200, cart });
+        } else {
+            // Create a new cart
+            const newCart = new Cart({
+                userId,
+                items: [{ fabricId, quantity, price, discount, finalPrice }]
+            });
+            const savedCart = await newCart.save();
+            res.status(201).json({ status: 201, cart: savedCart });
+        }
+    } catch (error) {
+        res.status(500).json({ error: "Failed to add item to cart", details: error });
+    }
+});
+
+// Get cart details for a user
+router.get("/cart/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const cart = await Cart.findOne({ userId }).populate("items.fabricId"); // Populate fabric details if needed
+        if (!cart) {
+            return res.status(404).json({ error: "Cart not found for the user" });
+        }
+        res.status(200).json({ status: 200, cart });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch cart", details: error });
+    }
+});
+
+// Update the quantity of an item in the cart
+router.patch("/cart/update/:userId/:fabricId", async (req, res) => {
+    const { userId, fabricId } = req.params;
+    const { quantity } = req.body;
+
+    try {
+        const cart = await Cart.findOne({ userId });
+
+        if (!cart) {
+            return res.status(404).json({ error: "Cart not found for the user" });
+        }
+
+        const itemIndex = cart.items.findIndex(item => item.fabricId.toString() === fabricId);
+
+        if (itemIndex > -1) {
+            // Update the quantity
+            cart.items[itemIndex].quantity = quantity;
+            cart.items[itemIndex].finalPrice = quantity * cart.items[itemIndex].price;
+            await cart.save();
+            res.status(200).json({ status: 200, cart });
+        } else {
+            res.status(404).json({ error: "Item not found in the cart" });
+        }
+    } catch (error) {
+        res.status(500).json({ error: "Failed to update cart", details: error });
+    }
+});
+
+// Remove an item from the cart
+router.delete("/cart/remove/:userId/:fabricId", async (req, res) => {
+    const { userId, fabricId } = req.params;
+
+    try {
+        const cart = await Cart.findOne({ userId });
+
+        if (!cart) {
+            return res.status(404).json({ error: "Cart not found for the user" });
+        }
+
+        cart.items = cart.items.filter(item => item.fabricId.toString() !== fabricId);
+
+        await cart.save();
+        res.status(200).json({ status: 200, cart });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to remove item from cart", details: error });
+    }
+});
+
+// Clear the entire cart
+router.delete("/cart/clear/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const cart = await Cart.findOneAndDelete({ userId });
+        if (!cart) {
+            return res.status(404).json({ error: "Cart not found for the user" });
+        }
+        res.status(200).json({ status: 200, message: "Cart cleared successfully" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to clear cart", details: error });
     }
 });
 
