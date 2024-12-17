@@ -5,6 +5,9 @@ const router = new express.Router();
 var bcrypt = require("bcryptjs");
 const authenticate = require("../middleware/authenticate");
 const Cart = require("../models/cartSchema");
+const Order = require("../models/orderSchema");
+const jwt = require("jsonwebtoken");
+const keysecret = "aniketsolankipareshbhaianiketsol";
 //for user registration
 
 router.post("/register", async (req, res) => {
@@ -75,6 +78,30 @@ router.post("/login", async (req, res) => {
     }
 });
 
+router.post("/admin/login", async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(422).json({ error: "Please fill in all details" });
+    }
+
+    try {
+        if(email === 'aniket63560@gmail.com' && password === 'aniket123'){
+    
+            res.status(201).json({ status: 201 });
+        }
+        else{
+            return res.status(422).json({ error: "Admin not found" });
+        }
+
+        
+    } catch (error) {
+        console.error("Error during admin login:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+
 
 router.post("/logout", authenticate, async (req, res) => {
     try {
@@ -97,6 +124,57 @@ router.get("/validuser", authenticate, async (req, res) => {
         res.status(401).json({ status: 401, error });
     }
 });
+
+// Fetch all users
+router.get("/user/all", async (req, res) => {
+    try {
+        const users = await userdb.find();
+        res.status(200).json({ status: 200, users });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch users", details: error });
+    }
+});
+
+// Fetch a particular user by ID
+router.get("/user/:id", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const user = await userdb.findById(id);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        res.status(200).json({ status: 200, user });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch user", details: error });
+    }
+});
+
+// Delete a particular user by ID
+router.delete("/user/delete/:id", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const user = await userdb.findByIdAndDelete(id);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        res.status(200).json({ status: 200, message: "User deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete user", details: error });
+    }
+});
+
+// Delete all users
+router.delete("/user/deleteAll", async (req, res) => {
+    try {
+        await userdb.deleteMany();
+        res.status(200).json({ status: 200, message: "All users deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete users", details: error });
+    }
+});
+
 
 // Fabric apis 
 router.post("/fabric/create", async (req, res) => {
@@ -308,7 +386,7 @@ router.get("/cart/:userId", async (req, res) => {
     const { userId } = req.params;
 
     try {
-        const cart = await Cart.findOne({ userId }).populate("items.fabricId"); // Populate fabric details if needed
+        const cart = await Cart.findOne({ userId }).populate("items.fabricId"); 
         if (!cart) {
             return res.status(404).json({ error: "Cart not found for the user" });
         }
@@ -378,6 +456,126 @@ router.delete("/cart/clear/:userId", async (req, res) => {
         res.status(200).json({ status: 200, message: "Cart cleared successfully" });
     } catch (error) {
         res.status(500).json({ error: "Failed to clear cart", details: error });
+    }
+});
+
+
+// Create a new order
+router.post("/order/create", async (req, res) => {
+    const { userId, items, shippingAddress, paymentMethod, totalAmount } = req.body;
+
+    if (!userId || !items || !shippingAddress || !paymentMethod || !totalAmount) {
+        return res.status(422).json({ error: "Please provide all required fields" });
+    }
+
+    try {
+        const newOrder = new Order({
+            userId,
+            items,
+            shippingAddress,
+            paymentMethod,
+            totalAmount,
+            status: "Pending" 
+        });
+
+        const savedOrder = await newOrder.save();
+        res.status(201).json({ status: 201, order: savedOrder });
+    } catch (error) {
+        console.error('Error saving order:', error);  // Log the error details
+        res.status(500).json({ error: "Failed to create order", details: error });
+    }
+});
+
+
+// Fetch all orders
+router.get("/order/all", async (req, res) => {
+    try {
+        const orders = await Order.find().populate("items.fabricId"); // Populates fabric details
+        res.status(200).json({ status: 200, orders });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch orders", details: error });
+    }
+});
+
+// Fetch orders for a specific user
+router.get("/order/user/:userId", async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const orders = await Order.find({ userId }).populate("items.fabricId");
+        if (!orders || orders.length === 0) {
+            return res.status(404).json({ error: "No orders found for the user" });
+        }
+        res.status(200).json({ status: 200, orders });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch user orders", details: error });
+    }
+});
+
+// Fetch a single order by ID
+router.get("/order/:orderId", async (req, res) => {
+    const { orderId } = req.params;
+
+    try {
+        const order = await Order.findById(orderId).populate("items.fabricId");
+        if (!order) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+        res.status(200).json({ status: 200, order });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch order", details: error });
+    }
+});
+
+// Update order status
+router.patch("/order/update-status/:orderId", async (req, res) => {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+        return res.status(422).json({ error: "Please provide a valid status" });
+    }
+
+    try {
+        const updatedOrder = await Order.findByIdAndUpdate(
+            orderId,
+            { status },
+            { new: true }
+        );
+
+        if (!updatedOrder) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+
+        res.status(200).json({ status: 200, order: updatedOrder });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to update order status", details: error });
+    }
+});
+
+// Delete an order by ID
+router.delete("/order/delete/:orderId", async (req, res) => {
+    const { orderId } = req.params;
+
+    try {
+        const deletedOrder = await Order.findByIdAndDelete(orderId);
+        if (!deletedOrder) {
+            return res.status(404).json({ error: "Order not found" });
+        }
+
+        res.status(200).json({ status: 200, message: "Order deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete order", details: error });
+    }
+});
+
+// Delete all orders (admin functionality)
+router.delete("/order/deleteAll", async (req, res) => {
+    try {
+        await Order.deleteMany();
+        res.status(200).json({ status: 200, message: "All orders deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete orders", details: error });
     }
 });
 
